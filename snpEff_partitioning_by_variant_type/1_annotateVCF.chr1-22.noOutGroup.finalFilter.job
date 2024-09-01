@@ -1,0 +1,37 @@
+#!/bin/bash
+#SBATCH --account=XXXX
+#SBATCH --job-name=annotateVCF.finalFilter
+#SBATCH -o annotateVCF.finalFilter.o%j
+#SBATCH -e annotateVCF.finalFilter.e%j
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=16
+#SBATCH --mem=124G
+#SBATCH --time=3-00:00:00
+
+module load gcc/7.3.0 swset/2018.05 jdk/14.0.1
+
+## need to specify memory with VCFs with multiple samples
+
+IN_DIR = LOC_of_indv_sample_VCFs
+
+
+### indv sample vcfs were split from final filtered VCF file
+### using bcftools +split -S sample.noOutGroup.list -o ./indv_VCFs/ -Oz FINAL.vcf.gz
+
+
+### annotate VCF file (job must be executed and directed to from within the snpEff directory 
+
+for i in `cat snpEff_SAMPLE.list`
+do sample=$i
+
+java -Xmx120g -jar snpEff.jar -v GCF_015220075 ${IN_DIR}/${sample}.vcf.gz > ${sample}.ann.vcf
+
+bgzip ${sample}.ann.vcf
+
+## mkdir ${sample}.snpEff.out
+## mv ${sample}.ann.vcf.gz ./${sample}.snpEff.out
+## mv snpEff_genes.txt ./${sample}.snpEff.out/${sample}.snpEff_genes.txt
+## mv snpEff_summary.html ./${sample}.snpEff.out/${sample}.snpEff_summary.html
+
+done
+

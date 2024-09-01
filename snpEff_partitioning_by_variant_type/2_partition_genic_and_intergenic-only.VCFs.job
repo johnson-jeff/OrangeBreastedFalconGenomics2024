@@ -1,0 +1,49 @@
+#!/bin/bash
+#SBATCH --account=XXXX
+#SBATCH --job-name=genic_or_intergenic-only.VCFs
+#SBATCH -o genic_or_intergenic-only.VCFs.o%j
+#SBATCH -e genic_or_intergenic-only.VCFs.e%j
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=16
+#SBATCH --time=1-00:00:00
+
+
+module load arcc/1.0 gcc/12.2.0 vcftools/0.1.16 bcftools/1.16
+
+IN_DIR = LOC_OF_ANNOTATED_snpEff_VCFs
+OUT_DIR = LOC_FOR_OUTFILES
+
+KEEP = LOC_OF_TXT_FILE_LISTING_ALL_VARIABLE_SITES_IN_VCF_POP_FILES #(NO FIXED SITES FOR BOTH GENIC AND INTERGENIC DATASETS)
+BED = LOC_OF_BED_FILE_FROM_REF_GENOME
+
+for i in `cat SAMPLE.list`
+do sample=$i
+	## create genic-only vcfs
+	vcftools --gzvcf ${IN_DIR}/${i}.ann.vcf.gz --recode --recode-INFO-all --stdout --bed ${BED} | bgzip --threads 16 > ${OUT_DIR}/${i}.ann.genic_snps.vcf.gz
+	## create intergenic-only vcfs
+	vcftools --gzvcf ${IN_DIR}/${i}.ann.vcf.gz --recode --recode-INFO-all --stdout --exclude-bed ${BED} | bgzip --threads 16 > ${OUT_DIR}/${i}.ann.intergenic_snps.vcf.gz
+	## REMOVE UNWANTED SITES (FIXED SITES)
+	vcftools --gzvcf ${OUT_DIR}/${i}.ann.genic_snps.vcf.gz --positions ${KEEP} --recode --recode-INFO-all --stdout | \
+	bgzip --threads 16 > ${OUT_DIR}/${i}.ann.genic_noFIXED-SITES.vcf.gz
+	
+	vcftools --gzvcf ${OUT_DIR}/${i}.ann.intergenic_snps.vcf.gz --positions ${KEEP} --recode --recode-INFO-all --stdout | \
+	bgzip --threads 16 > ${OUT_DIR}/${i}.ann.intergenic_noFIXED-SITES.vcf.gz
+
+
+done
+
+IN_DIR2 = LOC_OF_VCF_FROM_PREVIOUS_STEP
+OUT_DIR2 = LOC_FOR_OUTFILES
+
+## exclude sites labeled as WARNING sites
+for i in `cat SAMPLE.list`
+do sample=$i
+	zcat ${IN_DIR2}/${i}.ann.genic_noFIXED-SITES.vcf.gz | grep "WARNING" | cut -f1,2 > ${IN_DIR2}/${i}.noFIXED-SITES.bad_sites.txt
+	vcftools --gzvcf ${IN_DIR2}/${i}.ann.genic_noFIXED-SITES.vcf.gz --exclude-positions ${IN_DIR2}/${i}.noFIXED-SITES.bad_sites.txt --recode --recode-INFO-all --stdout | \
+	bgzip --threads 16 > ${OUT_DIR2}/${i}.ann.genic_noFIXED-SITES_good_snps.vcf.gz
+
+	zcat ${IN_DIR2}/${i}.ann.intergenic_noFIXED-SITES.vcf.gz | grep "WARNING" | cut -f1,2 > ${IN_DIR2}/${i}.noFIXED-SITES.bad_sites.txt
+	vcftools --gzvcf ${IN_DIR2}/${i}.ann.intergenic_noFIXED-SITES.vcf.gz --exclude-positions ${IN_DIR2}/${i}.noFIXED-SITES.bad_sites.txt --recode --recode-INFO-all --stdout | \
+	bgzip --threads 16 > ${OUT_DIR2}/${i}.ann.intergenic_noFIXED-SITES_good_snps.vcf.gz
+
+done

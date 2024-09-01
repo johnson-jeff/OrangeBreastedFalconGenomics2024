@@ -1,0 +1,181 @@
+#!/bin/bash
+#SBATCH --account=falcongenomes
+#SBATCH --job-name=POP_variant_INTEGENIC_annotations
+#SBATCH -o POP_variant_INTEGENIC_annotations.o%j
+#SBATCH -e POP_variant_INTEGENIC_annotations.e%j
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=16
+#SBATCH --time=1-00:00:00
+
+### USE THESE SCRIPTS FOR GENERATING FILES FOR CALCULATING RXY 	
+
+module load arcc/1.0 gcc/12.2.0 vcftools/0.1.16 bcftools/1.16
+
+IN_DIR = LOC_OF_FINAL_FILTERED_VCF_WITH_ALL_SAMPLES
+IN = NAME_OF_FINAL_FILTERED_VCF_WITH_ALL_SAMPLES  ## EXCLUDE '.vcf.gz or 'noFIXED-SITES.vcf.gz depending on step'
+
+OUT_DIR = LOC_FOR_OUTFILES
+
+KEEP = LOC_OF_TXT_FILE_LISTING_ALL_VARIABLE_SITES_IN_VCF_POP_FILES #(NO FIXED SITES FOR BOTH GENIC AND INTERGENIC DATASETS)
+
+LIST_DIR = LOC_of_noFIXED-sites.list_FILES
+
+SAMPLE_LIST = SAMPLES_TO_KEEP.list  ## text file with sample names as used in VCF file
+
+POP1 = NAME_OF_POP_1
+POP2 = NAME_OF_POP_2
+	
+## remove fixed ancestral sites	
+ 	vcftools --gzvcf ${IN_DIR}/${IN}.vcf.gz --positions ${KEEP} \
+ 	--recode --recode-INFO-all --stdout | bgzip -@ 16 > ${IN_DIR}/${IN}.noFIXED-SITES.vcf.gz
+	
+
+## HIGH Impact variants
+ 	vcftools --gzvcf ${IN_DIR}/${IN}.noFIXED-SITES.vcf.gz --positions ${LIST_DIR}/noFIXED-SITES.Priority.HIGH_sites.txt \
+ 	--recode --recode-INFO-all --stdout | bgzip -@ 16 > ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.HIGH_snps.vcf.gz
+
+	vcftools --gzvcf ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.HIGH_snps.vcf.gz --keep ${SAMPLE_LIST} --recode --recode-INFO-all --stdout | bcftools +fill-tags | bgzip -@ 16 > ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.HIGH_snps.vcf.gz
+	
+	vcftools --gzvcf ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.HIGH_snps.vcf.gz --remove ${SAMPLE_LIST} --recode --recode-INFO-all --stdout | bcftools +fill-tags | bgzip -@ 16 > ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.HIGH_snps.vcf.gz
+	
+	bcftools query -f '%CHROM %POS [ %GT]\n' ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.HIGH_snps.vcf.gz > ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.HIGH_snps.site-genotypes.txt
+	bcftools query -f '%CHROM %POS [ %GT]\n' ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.HIGH_snps.vcf.gz > ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.HIGH_snps.site-genotypes.txt
+
+	vcftools --gzvcf ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.HIGH_snps.vcf.gz --freq --out ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.HIGH
+	cat ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.HIGH.frq | sed -e '1d' | cut -f6 > ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.HIGH.minor.frq
+
+	vcftools --gzvcf ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.HIGH_snps.vcf.gz --freq --out ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.HIGH
+	cat ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.HIGH.frq | sed -e '1d' | cut -f6 > ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.HIGH.minor.frq
+
+## LOF variants
+ 	vcftools --gzvcf ${IN_DIR}/${IN}.noFIXED-SITES.vcf.gz --positions ${LIST_DIR}/noFIXED-SITES.Priority.LOF_sites.txt \
+ 	--recode --recode-INFO-all --stdout | bgzip -@ 16 > ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.LOF_snps.vcf.gz
+
+	vcftools --gzvcf ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.LOF_snps.vcf.gz --keep ${SAMPLE_LIST} --recode --recode-INFO-all --stdout | bcftools +fill-tags | bgzip -@ 16 > ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.LOF_snps.vcf.gz
+	
+	vcftools --gzvcf ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.LOF_snps.vcf.gz --remove ${SAMPLE_LIST} --recode --recode-INFO-all --stdout | bcftools +fill-tags | bgzip -@ 16 > ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.LOF_snps.vcf.gz
+	
+	bcftools query -f '%CHROM %POS [ %GT]\n' ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.LOF_snps.vcf.gz > ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.LOF_snps.site-genotypes.txt
+	bcftools query -f '%CHROM %POS [ %GT]\n' ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.LOF_snps.vcf.gz > ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.LOF_snps.site-genotypes.txt
+
+	vcftools --gzvcf ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.LOF_snps.vcf.gz --freq --out ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.LOF
+	cat ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.LOF.frq | sed -e '1d' | cut -f6 > ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.LOF.minor.frq
+	
+	vcftools --gzvcf ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.LOF_snps.vcf.gz --freq --out ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.LOF
+	cat ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.LOF.frq | sed -e '1d' | cut -f6 > ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.LOF.minor.frq
+		
+## MODERATE Impact variants
+ 	vcftools --gzvcf ${IN_DIR}/${IN}.noFIXED-SITES.vcf.gz --positions ${LIST_DIR}/noFIXED-SITES.Priority.MOD_sites.txt \
+ 	--recode --recode-INFO-all --stdout | bgzip -@ 16 > ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.MOD_snps.vcf.gz
+
+	vcftools --gzvcf ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.MOD_snps.vcf.gz --keep ${SAMPLE_LIST} --recode --recode-INFO-all --stdout | bcftools +fill-tags | bgzip -@ 16 > ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.MOD_snps.vcf.gz
+	
+	vcftools --gzvcf ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.MOD_snps.vcf.gz --remove ${SAMPLE_LIST} --recode --recode-INFO-all --stdout | bcftools +fill-tags | bgzip -@ 16 > ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.MOD_snps.vcf.gz
+	
+	bcftools query -f '%CHROM %POS [ %GT]\n' ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.MOD_snps.vcf.gz > ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.MOD_snps.site-genotypes.txt
+	bcftools query -f '%CHROM %POS [ %GT]\n' ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.MOD_snps.vcf.gz > ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.MOD_snps.site-genotypes.txt
+
+	vcftools --gzvcf ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.MOD_snps.vcf.gz --freq --out ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.MOD
+	cat ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.MOD.frq | sed -e '1d' | cut -f6 > ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.MOD.minor.frq
+
+	vcftools --gzvcf ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.MOD_snps.vcf.gz --freq --out ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.MOD
+	cat ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.MOD.frq | sed -e '1d' | cut -f6 > ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.MOD.minor.frq
+
+## LOW Impact variants
+ 	vcftools --gzvcf ${IN_DIR}/${IN}.noFIXED-SITES.vcf.gz --positions ${LIST_DIR}/noFIXED-SITES.Priority.LOW_sites.txt \
+ 	--recode --recode-INFO-all --stdout | bgzip -@ 16 > ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.LOW_snps.vcf.gz
+
+	vcftools --gzvcf ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.LOW_snps.vcf.gz --keep ${SAMPLE_LIST} --recode --recode-INFO-all --stdout | bcftools +fill-tags | bgzip -@ 16 > ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.LOW_snps.vcf.gz
+	
+	vcftools --gzvcf ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.LOW_snps.vcf.gz --remove ${SAMPLE_LIST} --recode --recode-INFO-all --stdout | bcftools +fill-tags | bgzip -@ 16 > ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.LOW_snps.vcf.gz
+
+	bcftools query -f '%CHROM %POS [ %GT]\n' ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.LOW_snps.vcf.gz > ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.LOW_snps.site-genotypes.txt
+	bcftools query -f '%CHROM %POS [ %GT]\n' ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.LOW_snps.vcf.gz > ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.LOW_snps.site-genotypes.txt
+
+	vcftools --gzvcf ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.LOW_snps.vcf.gz --freq --out ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.LOW
+	cat ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.LOW.frq | sed -e '1d' | cut -f6 > ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.LOW.minor.frq
+
+	vcftools --gzvcf ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.LOW_snps.vcf.gz --freq --out ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.LOW
+	cat ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.LOW.frq | sed -e '1d' | cut -f6 > ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.LOW.minor.frq
+	
+## No Impact variants
+ 	vcftools --gzvcf ${IN_DIR}/${IN}.noFIXED-SITES.vcf.gz --positions ${LIST_DIR}/noFIXED-SITES.Priority.NoIMPACT_sites.txt \
+ 	--recode --recode-INFO-all --stdout | bgzip -@ 16 > ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.NoIMPACT_snps.vcf.gz
+
+	vcftools --gzvcf ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.NoIMPACT_snps.vcf.gz --keep ${SAMPLE_LIST} --recode --recode-INFO-all --stdout | bcftools +fill-tags | bgzip -@ 16 > ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.NoIMPACT_snps.vcf.gz
+	
+	vcftools --gzvcf ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.NoIMPACT_snps.vcf.gz --remove ${SAMPLE_LIST} --recode --recode-INFO-all --stdout | bcftools +fill-tags | bgzip -@ 16 > ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.NoIMPACT_snps.vcf.gz
+	
+	bcftools query -f '%CHROM %POS [ %GT]\n' ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.NoIMPACT_snps.vcf.gz > ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.NoIMPACT_snps.site-genotypes.txt
+	bcftools query -f '%CHROM %POS [ %GT]\n' ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.NoIMPACT_snps.vcf.gz > ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.NoIMPACT_snps.site-genotypes.txt
+
+	vcftools --gzvcf ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.NoIMPACT_snps.vcf.gz --freq --out ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.NoIMPACT
+	cat ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.NoIMPACT.frq | sed -e '1d' | cut -f6 > ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.NoIMPACT.minor.frq
+
+	vcftools --gzvcf ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.NoIMPACT_snps.vcf.gz --freq --out ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.NoIMPACT
+	cat ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.NoIMPACT.frq | sed -e '1d' | cut -f6 > ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.NoIMPACT.minor.frq
+	
+## synonymous variants
+ 	vcftools --gzvcf ${IN_DIR}/${IN}.noFIXED-SITES.vcf.gz --positions ${LIST_DIR}/noFIXED-SITES.Priority.synonymous_sites.txt \
+ 	--recode --recode-INFO-all --stdout | bgzip -@ 16 > ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.synonymous_snps.vcf.gz
+
+	vcftools --gzvcf ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.synonymous_snps.vcf.gz --keep ${SAMPLE_LIST} --recode --recode-INFO-all --stdout | bcftools +fill-tags | bgzip -@ 16 > ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.synonymous_snps.vcf.gz
+	
+	vcftools --gzvcf ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.synonymous_snps.vcf.gz --remove ${SAMPLE_LIST} --recode --recode-INFO-all --stdout | bcftools +fill-tags | bgzip -@ 16 > ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.synonymous_snps.vcf.gz
+	
+	bcftools query -f '%CHROM %POS [ %GT]\n' ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.synonymous_snps.vcf.gz > ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.synonymous_snps.site-genotypes.txt
+	bcftools query -f '%CHROM %POS [ %GT]\n' ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.synonymous_snps.vcf.gz > ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.synonymous_snps.site-genotypes.txt
+
+	vcftools --gzvcf ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.synonymous_snps.vcf.gz --freq --out ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.synonymous
+	cat ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.synonymous.frq | sed -e '1d' | cut -f6 > ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.synonymous.minor.frq
+
+	vcftools --gzvcf ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.synonymous_snps.vcf.gz --freq --out ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.synonymous
+	cat ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.synonymous.frq | sed -e '1d' | cut -f6 > ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.synonymous.minor.frq
+
+
+## INTERGENIC variants
+ 	vcftools --gzvcf ${IN_DIR}/${IN}.noFIXED-SITES.vcf.gz --positions ${LIST_DIR}/noFIXED-SITES.Priority.intergenic_sites.txt \
+ 	--recode --recode-INFO-all --stdout | bgzip -@ 16 > ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.intergenic_snps.vcf.gz
+
+	vcftools --gzvcf ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.intergenic_snps.vcf.gz --keep ${SAMPLE_LIST} --recode --recode-INFO-all --stdout | bcftools +fill-tags | bgzip -@ 16 > ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.intergenic_snps.vcf.gz
+	
+	vcftools --gzvcf ${OUT_DIR}/${IN}.noFIXED-SITES.Priority.intergenic_snps.vcf.gz --remove ${SAMPLE_LIST} --recode --recode-INFO-all --stdout | bcftools +fill-tags | bgzip -@ 16 > ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.intergenic_snps.vcf.gz
+	
+	bcftools query -f '%CHROM %POS [ %GT]\n' ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.intergenic_snps.vcf.gz > ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.intergenic_snps.site-genotypes.txt
+	bcftools query -f '%CHROM %POS [ %GT]\n' ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.intergenic_snps.vcf.gz > ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.intergenic_snps.site-genotypes.txt
+
+	vcftools --gzvcf ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.intergenic_snps.vcf.gz --freq --out ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.intergenic
+	cat ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.intergenic.frq | sed -e '1d' | cut -f6 > ${OUT_DIR}/freq_files/{POP1}.noFIXED-SITES.Priority.intergenic.minor.frq
+
+	vcftools --gzvcf ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.intergenic_snps.vcf.gz --freq --out ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.intergenic
+	cat ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.intergenic.frq | sed -e '1d' | cut -f6 > ${OUT_DIR}/freq_files/{POP2}.noFIXED-SITES.Priority.intergenic.minor.frq
+
+	
+## prepare samples for Rxy calculations
+
+## zcat ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.HIGH_snps.vcf.gz | grep -v "#" | cut -f1,2,8 | tr ";" "\t" | cut -f1,2,5,7 > ${OUT_DIR}/AlleleCount_files/{POP1}.noFIXED-SITES.Priority.HIGH_snps.AlleleCount.txt
+## zcat ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.LOF_snps.vcf.gz | grep -v "#" | cut -f1,2,8 | tr ";" "\t" | cut -f1,2,5,7 > ${OUT_DIR}/AlleleCount_files/{POP1}.noFIXED-SITES.Priority.LOF_snps.AlleleCount.txt
+## zcat ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.LOW_snps.vcf.gz | grep -v "#" | cut -f1,2,8 | tr ";" "\t" | cut -f1,2,5,7 > ${OUT_DIR}/AlleleCount_files/{POP1}.noFIXED-SITES.Priority.LOW_snps.AlleleCount.txt
+## zcat ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.MOD_snps.vcf.gz | grep -v "#" | cut -f1,2,8 | tr ";" "\t" | cut -f1,2,5,7 > ${OUT_DIR}/AlleleCount_files/{POP1}.noFIXED-SITES.Priority.MOD_snps.AlleleCount.txt
+## zcat ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.NoIMPACT_snps.vcf.gz | grep -v "#" | cut -f1,2,8 | tr ";" "\t" | cut -f1,2,5,7 > ${OUT_DIR}/AlleleCount_files/{POP1}.noFIXED-SITES.Priority.NoIMPACT_snps.AlleleCount.txt
+## zcat ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.synonymous_snps.vcf.gz | grep -v "#" | cut -f1,2,8 | tr ";" "\t" | cut -f1,2,5,7 > ${OUT_DIR}/AlleleCount_files/{POP1}.noFIXED-SITES.Priority.synonymous_snps.AlleleCount.txt
+## zcat ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.HIGH_snps.vcf.gz | grep -v "#" | cut -f1,2,8 | tr ";" "\t" | cut -f1,2,5,7 > ${OUT_DIR}/AlleleCount_files/{POP2}.noFIXED-SITES.Priority.HIGH_snps.AlleleCount.txt
+## zcat ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.LOF_snps.vcf.gz | grep -v "#" | cut -f1,2,8 | tr ";" "\t" | cut -f1,2,5,7 > ${OUT_DIR}/AlleleCount_files/{POP2}.noFIXED-SITES.Priority.LOF_snps.AlleleCount.txt
+## zcat ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.LOW_snps.vcf.gz | grep -v "#" | cut -f1,2,8 | tr ";" "\t" | cut -f1,2,5,7 > ${OUT_DIR}/AlleleCount_files/{POP2}.noFIXED-SITES.Priority.LOW_snps.AlleleCount.txt
+## zcat ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.MOD_snps.vcf.gz | grep -v "#" | cut -f1,2,8 | tr ";" "\t" | cut -f1,2,5,7 > ${OUT_DIR}/AlleleCount_files/{POP2}.noFIXED-SITES.Priority.MOD_snps.AlleleCount.txt
+## zcat ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.NoIMPACT_snps.vcf.gz | grep -v "#" | cut -f1,2,8 | tr ";" "\t" | cut -f1,2,5,7 > ${OUT_DIR}/AlleleCount_files/{POP2}.noFIXED-SITES.Priority.NoIMPACT_snps.AlleleCount.txt
+## zcat ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.synonymous_snps.vcf.gz | grep -v "#" | cut -f1,2,8 | tr ";" "\t" | cut -f1,2,5,7 > ${OUT_DIR}/AlleleCount_files/{POP2}.noFIXED-SITES.Priority.synonymous_snps.AlleleCount.txt
+
+zcat ${OUT_DIR}/{POP1}.noFIXED-SITES.Priority.intergenic_snps.vcf.gz | grep -v "#" | cut -f1,2,8 | tr ";" "\t" | cut -f1,2,5,7 > ${OUT_DIR}/AlleleCount_files/{POP1}.noFIXED-SITES.Priority.intergenic_snps.AlleleCount.txt
+zcat ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.intergenic_snps.vcf.gz | grep -v "#" | cut -f1,2,8 | tr ";" "\t" | cut -f1,2,5,7 > ${OUT_DIR}/AlleleCount_files/{POP2}.noFIXED-SITES.Priority.intergenic_snps.AlleleCount.txt
+
+## generate input file for R
+
+paste ${OUT_DIR}/AlleleCount_files/{POP1}.noFIXED-SITES.Priority.HIGH_snps.AlleleCount.txt ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.HIGH_snps.AlleleCount.txt | tr "=" "\t" | awk '{print ($1"_"$2,$4,$10)}' > ${OUT_DIR}/AlleleCount_files/{POP1}.{POP2}_Priority.HIGH_AF.perSite.txt
+paste ${OUT_DIR}/AlleleCount_files/{POP1}.noFIXED-SITES.Priority.LOF_snps.AlleleCount.txt ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.LOF_snps.AlleleCount.txt | tr "=" "\t" | awk '{print ($1"_"$2,$4,$10)}' > ${OUT_DIR}/AlleleCount_files/{POP1}.{POP2}_Priority.LOF.AF.perSite.txt
+paste ${OUT_DIR}/AlleleCount_files/{POP1}.noFIXED-SITES.Priority.LOW_snps.AlleleCount.txt ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.LOW_snps.AlleleCount.txt | tr "=" "\t" | awk '{print ($1"_"$2,$4,$10)}' > ${OUT_DIR}/AlleleCount_files/{POP1}.{POP2}_Priority.LOW.AF.perSite.txt
+paste ${OUT_DIR}/AlleleCount_files/{POP1}.noFIXED-SITES.Priority.MOD_snps.AlleleCount.txt ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.MOD_snps.AlleleCount.txt | tr "=" "\t" | awk '{print ($1"_"$2,$4,$10)}' > ${OUT_DIR}/AlleleCount_files/{POP1}.{POP2}_Priority.MOD.AF.perSite.txt
+paste ${OUT_DIR}/AlleleCount_files/{POP1}.noFIXED-SITES.Priority.NoIMPACT_snps.AlleleCount.txt ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.NoIMPACT_snps.AlleleCount.txt | tr "=" "\t" | awk '{print ($1"_"$2,$4,$10)}' > ${OUT_DIR}/AlleleCount_files/{POP1}.{POP2}_Priority.NoImpact.AF.perSite.txt
+paste ${OUT_DIR}/AlleleCount_files/{POP1}.noFIXED-SITES.Priority.synonymous_snps.AlleleCount.txt ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.synonymous_snps.AlleleCount.txt | tr "=" "\t" | awk '{print ($1"_"$2,$4,$10)}' > ${OUT_DIR}/AlleleCount_files/{POP1}.{POP2}_Priority.synonymous.AF.perSite.txt
+
+paste ${OUT_DIR}/AlleleCount_files/{POP1}.noFIXED-SITES.Priority.intergenic_snps.AlleleCount.txt ${OUT_DIR}/{POP2}.noFIXED-SITES.Priority.intergenic_snps.AlleleCount.txt | tr "=" "\t" | awk '{print ($1"_"$2,$4,$10)}' > ${OUT_DIR}/AlleleCount_files/{POP1}.{POP2}_Priority.intergenic.AF.perSite.txt

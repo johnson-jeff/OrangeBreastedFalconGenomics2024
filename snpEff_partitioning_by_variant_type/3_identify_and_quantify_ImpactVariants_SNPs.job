@@ -1,0 +1,106 @@
+#!/bin/bash
+#SBATCH --account=xxxx
+#SBATCH --job-name=identify_and_quantify_ImpactVariants_SNPs
+#SBATCH -o identify_and_quantify_ImpactVariants_intergenicSNPs.o%j
+#SBATCH -e identify_and_quantify_ImpactVariants_intergenicSNPs.e%j
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=16
+#SBATCH --time=1-00:00:00
+
+
+module load arcc/1.0 gcc/12.2.0 vcftools/0.1.16 bcftools/1.16
+
+### extract HIGH, MODERATE, LOW, and NO-IMPACT variants
+
+IN_DIR = LOC_OF_ANNOTATED_GENIC_and_INTERGENIC_VCF_FILEs
+OUT_DIR = LOC_FOR_OUTFILES
+
+for i in `cat SAMPLE.list`
+do sample=$i
+ 	zcat ${IN_DIR}/${i}.ann.genic_noFIXED-SITES_good_snps.vcf.gz | grep -v "#" | tr "," "\t" | cut -f 1-8 | grep HIGH | cut -f1,2 > ${OUT_DIR}/${i}.noFIXED-SITES.Priority.HIGH_sites.txt
+ 	zcat ${IN_DIR}/${i}.ann.genic_noFIXED-SITES_good_snps.vcf.gz | grep -v "#" | tr "," "\t" | cut -f 1-8 | grep MODERATE | cut -f1,2 > ${OUT_DIR}/${i}.noFIXED-SITES.Priority.MOD_sites.txt
+ 	zcat ${IN_DIR}/${i}.ann.genic_noFIXED-SITES_good_snps.vcf.gz | grep -v "#" | tr "," "\t" | cut -f 1-8 | grep LOW | cut -f1,2 > ${OUT_DIR}/${i}.noFIXED-SITES.Priority.LOW_sites.txt
+	zcat ${IN_DIR}/${i}.ann.genic_noFIXED-SITES_good_snps.vcf.gz | grep -v "#" | tr "," "\t" | cut -f 1-8 | grep MODIFIER | cut -f1,2 > ${OUT_DIR}/${i}.noFIXED-SITES.Priority.NoIMPACT_sites.txt
+	zcat ${IN_DIR}/${i}.ann.genic_noFIXED-SITES_good_snps.vcf.gz | grep -v "#" | tr "," "\t" | cut -f 1-8 | grep synonymous | cut -f1,2 > ${OUT_DIR}/${i}.noFIXED-SITES.Priority.synonymous_sites.txt
+
+	zcat ${IN_DIR}/${i}.ann.intergenic_noFIXED-SITES_good_snps.vcf.gz | grep -v "#" | tr "," "\t" | cut -f 1-8 | grep intergenic_region | cut -f1,2 > ${OUT_DIR}/${i}.noFIXED-SITES.Priority.intergenic_sites.txt
+
+	
+	### LOF notation is "special"; the label isn't provided until last part of ANN= grouping, and it is only given once per variant.  If we use a similar filtering script as those above, we only quantify those sites with one transcript, i.e., those with >1 transcript are cut from list.  Therefore, the original filtering script was fine for quantifying LOF
+	zcat ${IN_DIR}/${i}.ann.genic_noFIXED-SITES_good_snps.vcf.gz | grep -v "#" |grep "LOF" | cut -f1,2 > ${OUT_DIR}/${i}.noFIXED-SITES.Priority.LOF_sites.txt
+
+done
+
+
+### Obtain frequencies of each Impact Variant for each sample
+
+IN_DIR2 = INDIV_SAMPLE_VCFs_USED_IN_ANALYSES_POST_FILTER  #INCLUDES BOTH GENIC AND INTERGENIC SNPS
+OUT_DIR2 = LOC_FOR_OUTFILES
+
+LIST = LOC_of_noFIXED-sites.list_FILES_FOR_EACH_SAMPLE_GENERATED_FROM_ABOVE_STEP
+
+for i in `cat SAMPLE.list`
+do sample=$i
+ ## HIGH Impact variants
+  	vcftools --gzvcf ${IN_DIR2}/${i}.vcf.gz --positions ${LIST}/${i}.noFIXED-SITES.Priority.HIGH_sites.txt \
+  	--recode --recode-INFO-all --stdout | bgzip -@ 16 > ${OUT_DIR2}/${i}.noFIXED-SITES.Priority.HIGH_snps.vcf.gz
+ 
+ 	vcftools --gzvcf ${OUT_DIR2}/${i}.noFIXED-SITES.Priority.HIGH_snps.vcf.gz --freq --out ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.HIGH
+ 	
+ 	cat ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.HIGH.frq | sed -e '1d' | cut -f6 > ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.HIGH.minor.frq
+ 
+ ## MODERATE Impact variants
+  	vcftools --gzvcf ${IN_DIR2}/${i}.vcf.gz --positions ${LIST}/${i}.noFIXED-SITES.Priority.MOD_sites.txt \
+  	--recode --recode-INFO-all --stdout | bgzip -@ 16 > ${OUT_DIR2}/${i}.noFIXED-SITES.Priority.MOD_snps.vcf.gz
+ 
+ 	vcftools --gzvcf ${OUT_DIR2}/${i}.noFIXED-SITES.Priority.MOD_snps.vcf.gz --freq --out ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.MOD
+ 	
+ 	cat ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.MOD.frq | sed -e '1d' | cut -f6 > ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.MOD.minor.frq
+ 
+ ## LOW Impact variants
+  	vcftools --gzvcf ${IN_DIR2}/${i}.vcf.gz --positions ${LIST}/${i}.noFIXED-SITES.Priority.LOW_sites.txt \
+  	--recode --recode-INFO-all --stdout | bgzip -@ 16 > ${OUT_DIR2}/${i}.noFIXED-SITES.Priority.LOW_snps.vcf.gz
+ 
+ 	vcftools --gzvcf ${OUT_DIR2}/${i}.noFIXED-SITES.Priority.LOW_snps.vcf.gz --freq --out ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.LOW
+ 	
+ 	cat ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.LOW.frq | sed -e '1d' | cut -f6 > ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.LOW.minor.frq
+ 
+ ## No Impact variants
+  	vcftools --gzvcf ${IN_DIR2}/${i}.vcf.gz --positions ${LIST}/${i}.noFIXED-SITES.Priority.NoIMPACT_sites.txt \
+  	--recode --recode-INFO-all --stdout | bgzip -@ 16 > ${OUT_DIR2}/${i}.noFIXED-SITES.Priority.NoIMPACT_snps.vcf.gz
+ 
+ 	vcftools --gzvcf ${OUT_DIR2}/${i}.noFIXED-SITES.Priority.NoIMPACT_snps.vcf.gz --freq --out ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.NoIMPACT
+ 	
+ 	cat ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.NoIMPACT.frq | sed -e '1d' | cut -f6 > ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.NoIMPACT.minor.frq
+ 
+ ## LOF variants
+  	vcftools --gzvcf ${IN_DIR2}/${i}.vcf.gz --positions ${LIST}/${i}.noFIXED-SITES.Priority.LOF_sites.txt \
+  	--recode --recode-INFO-all --stdout | bgzip -@ 16 > ${OUT_DIR2}/${i}.noFIXED-SITES.Priority.LOF_snps.vcf.gz
+ 
+ 	vcftools --gzvcf ${OUT_DIR2}/${i}.noFIXED-SITES.Priority.LOF_snps.vcf.gz --freq --out ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.LOF
+ 	
+ 	cat ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.LOF.frq | sed -e '1d' | cut -f6 > ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.LOF.minor.frq
+ 
+ ## synonymous variants
+  	vcftools --gzvcf ${IN_DIR2}/${i}.vcf.gz --positions ${LIST}/${i}.noFIXED-SITES.Priority.synonymous_sites.txt \
+  	--recode --recode-INFO-all --stdout | bgzip -@ 16 > ${OUT_DIR2}/${i}.noFIXED-SITES.Priority.synonymous_snps.vcf.gz
+ 
+ 	vcftools --gzvcf ${OUT_DIR2}/${i}.noFIXED-SITES.Priority.synonymous_snps.vcf.gz --freq --out ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.synonymous
+ 	
+ 	cat ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.synonymous.frq | sed -e '1d' | cut -f6 > ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.synonymous.minor.frq
+ 
+ ## all variants
+ 	vcftools --gzvcf ${IN_DIR}/${i}.ann.genic_noFIXED-SITES_good_snps.vcf.gz --freq --out ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.allVariants
+ 	
+ 	cat ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.allVariants.frq | sed -e '1d' | cut -f6 > ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.allVariants.minor.frq
+	
+## intergenic variants	
+ 	vcftools --gzvcf ${IN_DIR2}/${i}.vcf.gz --positions ${LIST}/${i}.noFIXED-SITES.Priority.intergenic_sites.txt \
+ 	--recode --recode-INFO-all --stdout | bgzip -@ 16 > ${OUT_DIR2}/${i}.noFIXED-SITES.Priority.intergenic_snps.vcf.gz
+
+	vcftools --gzvcf ${OUT_DIR2}/${i}.noFIXED-SITES.Priority.intergenic_snps.vcf.gz --freq --out ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.intergenic
+	
+	cat ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.intergenic.frq | sed -e '1d' | cut -f6 > ${OUT_DIR2}/freq_files/${i}.noFIXED-SITES.Priority.intergenic.minor.frq
+	
+
+done
