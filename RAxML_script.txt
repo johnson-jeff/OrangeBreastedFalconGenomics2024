@@ -3,8 +3,6 @@
 ## convert vcf to phylip & nexus (latter for splitstree)
 
 IN_FILE=FILTERED_Intergenic
-OUT_FILE=/project/falcongenomes/jjohn289/VCF_files/VCFs_GyrRef/filtered_VCFs/noOutGroup_VCFs_set2/chr1-22.intergenic.allSamples_GyrRef.noOutGroup.GATK-HF.MQ40.max2allele.dp5.noindel.lowHet.maxmiss0.90.vcf.gz
-BED=/project/falcongenomes/jjohn289/Reference_Gyr/revised.bFalRus1.pri_genomic_justgenes_wHeader.bed
 
 ## LD-prune
 bcftools +prune -m 0.6 -w 10kb ${IN_FILE}.vcf.gz -Oz -o ${IN_FILE}.LD60.10kb.vcf.gz
