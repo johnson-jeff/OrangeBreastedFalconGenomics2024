@@ -1,0 +1,98 @@
+#!/bin/bash
+#SBATCH --account=xxxxx
+#SBATCH --job-name=BWA_MEM_MarkDup_GyrRef
+#SBATCH -o BWA_MEM_MarkDup_GyrRef.o%j
+#SBATCH -e BWA_MEM_MarkDup_GyrRef.e%j
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=16
+#SBATCH --time=2-00:00:00
+
+
+module load gcc/7.3.0 swset/2018.05 bwa/0.7.17 samtools/1.9 picard/2.20.1
+
+REF_DIR=/project/falcongenomes/jjohn289/Reference_Gyr
+
+## command used to identify the number of available processors
+NUMProc=( `grep -c ^processor /proc/cpuinfo 2> /dev/null` )
+
+FASTQ_DIR = LOC_OF_FASTQ_FILES
+
+OUT_DIR = LOC_FOR_OUT_FILES
+OUT_DIR2 = LOC_FOR_OUT_FILES_2
+
+REF_DIR = LOC_OF_REFERENCE_GENOME
+REF = LOC_AND_NAME_OF_REFERENCE_GENOME
+
+NAME_LIST = LIST_OF_SAMPLES
+
+## ## Things that you need to run only once, before everything else
+## ## BWA indexing the reference -- only needs to be ran once
+## bwa index ${REF_DIR}/bFalRus1.pri_genomic.fna
+## ## Picard Tools - CREATE DICTIONARIES
+## picard CreateSequenceDictionary R=${REF_DIR}/bFalRus1.pri_genomic.fna O=${REF_DIR}/bFalRus1.pri_genomic.dict
+
+
+##### Command Line arguments #####
+# $1 path to the initial input fastqs ie. /gscratch/jjohn289/bam2fastq/fastq 
+# $2 path to the output directory ie. /gscratch/jjohn289/MEM_mapped
+# 	IMPORTANT:  Do not include a "/" after the last directory it will break this script
+# $3 path and filename of the reference genome ie. /project/falcongenomes/jjohn289/Reference_GYR/bFalRus1.pri_genomic.fna
+#	IMPORTANT:  The reference genome must be correctly indexed with bwa-build once
+# $4 name of Namelist if user does not want script to create namelist, eg namelist_1
+
+
+## ##Create list of sample names  (or create your own to then subdivide and conquer if processing a lot of samples, ie parallele jobs)
+## if [ ! -f "$2/namelist" ]; then
+## 	cd ${FASTQ_DIR}
+## 	ls *.F.fq.gz > namelist
+## 	sed -i'' -e 's/.F.fq.gz//g' namelist
+## 	NAMES=( `cat "namelist" `)
+## else
+## 	echo "namelist already exists in $2; will proceed with processing the samples on that list"
+## 	NAMES=( `cat "namelist" `)
+## fi
+
+# 	above creates core namelist for input file
+#	In order to keep samples reasonably sorted and facilitate coding each sample has
+#	a unique prefix (this should be filename for the file filename.fastq.gz) each
+#	step in the pipeline then has a suffix
+
+	NAMES=( `cat "${NAME_LIST}" `)	### this assumes that the name of the namelist is provided in the job script (as opposed to doing the above)
+	
+###### MAIN SCRIPT ######
+
+for i in "${NAMES[@]}"
+do
+## BWA MEM local alignment 
+echo "using BWA MEM to map $i reads to ${REF}"
+
+bwa mem -t $NUMProc ${REF} ${FASTQ_DIR}/$i.R1.fastq.gz ${FASTQ_DIR}/$i.R2.fastq.gz > ${OUT_DIR}/$i.mem.PE.sam
+
+samtools view -@ $NUMProc -u -S ${OUT_DIR}/$i.mem.PE.sam | samtools sort -@ 10 - -o ${OUT_DIR}/$i.mem.PE.sorted.bam
+
+echo "F and R PE reads for $i mapped to reference completed"
+#
+
+
+### MarkDup, sort, index and add read group to all of the respective files 
+
+echo "removing duplicates from $i.mem.PE.sorted.bam"
+## picard markduplicates
+	java -Xmx10G -jar $picard MarkDuplicates I="${OUT_DIR}"/"$i.mem.PE.sorted.bam" O="${OUT_DIR2}"/"$i.mem.MarkDup.bam" M="${OUT_DIR2}"/"$i.mem.MarkDup.metrics.txt" VALIDATION_STRINGENCY=SILENT	
+
+echo "sort and index $i.mem.MarkDup.bam"
+	# samtools sort
+	samtools sort -@ $NUMProc ${OUT_DIR2}/$i.mem.MarkDup.bam -o ${OUT_DIR2}/$i.mem.MarkDup.sorted.bam
+	# samtools index 
+	samtools index -@ $NUMProc ${OUT_DIR2}/$i.mem.MarkDup.sorted.bam
+echo "adding read group and creating index for $i.rg.bam"
+	# picardtools adding read group
+	java -Xmx50G -jar $picard AddOrReplaceReadGroups I="${OUT_DIR2}"/"$i.mem.MarkDup.sorted.bam" O="${OUT_DIR2}"/"$i.rg.bam" RGID=$i RGLB="$i"_rglb RGPL=illumina RGPU="$i"_rgpu RGSM="$i"_rgsm VALIDATION_STRINGENCY=SILENT
+
+	# index picardtools output
+	samtools index ${OUT_DIR2}/$i.rg.bam	
+
+echo "Job", $i, "Mapping and Sorting", "Complete"
+done
+
+echo "Job Complete for ALL samples in ${NAME_LIST}"

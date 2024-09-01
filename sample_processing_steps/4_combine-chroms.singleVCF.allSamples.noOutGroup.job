@@ -1,0 +1,104 @@
+#!/bin/bash
+#SBATCH --account=xxxxxx
+#SBATCH --job-name=combine-chroms.singleVCF.Filter-steps.allSamples
+#SBATCH -o combine-chroms.singleVCF.Filter-steps.allSamples.o%j
+#SBATCH -e combine-chroms.singleVCF.Filter-steps.allSamples.e%j
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=2
+#SBATCH --time=3-00:00:00
+
+## use this script to combine all chr vcfs and combine into a single vcf then filter using GATK hard filters
+
+## module load gcc/7.3.0 swset/2018.05 bwa/0.7.17 samtools/1.9 picard/2.20.1
+module load gcc/7.3.0 swset/2018.05 samtools/1.9 bcftools/1.9 vcftools jdk/8u172-b11 python/2.7.15 gatk/4.1.8.0-py27 picard/2.20.1 
+
+OUT = LOC_OF_filtered_VCFs
+
+SAMPLE_NAME = LOC_AND_NAMES_OF_NEW_SAMPLE_NAMES_FOR_DOWNSTREAM_ANALYSES
+
+date
+## combine each chrom vcf into a single VCF 
+
+picard GatherVcfs \
+I=chr1.allSamples.vcf.gz \
+I=chr2.allSamples.vcf.gz \
+I=chr3.allSamples.vcf.gz \
+I=chr4.allSamples.vcf.gz \
+I=chr5.allSamples.vcf.gz \
+I=chr6.allSamples.vcf.gz \
+I=chr7.allSamples.vcf.gz \
+I=chr8.allSamples.vcf.gz \
+I=chr9.allSamples.vcf.gz \
+I=chr10.allSamples.vcf.gz \
+I=chr11.allSamples.vcf.gz \
+I=chr12.allSamples.vcf.gz \
+I=chr13.allSamples.vcf.gz \
+I=chr14.allSamples.vcf.gz \
+I=chr15.allSamples.vcf.gz \
+I=chr16.allSamples.vcf.gz \
+I=chr17.allSamples.vcf.gz \
+I=chr18.allSamples.vcf.gz \
+I=chr19.allSamples.vcf.gz \
+I=chr20.allSamples.vcf.gz \
+I=chr21.allSamples.vcf.gz \
+I=chr22.allSamples.vcf.gz \
+O=chr1-22.allSamples.vcf.gz
+
+
+## GATK hard filters + additional filter steps
+
+MAPQ=40
+MAXALLELES=2
+MinDP=3
+HETERO=0.60
+MAXMISSING=0.90
+
+## location of additional scripts for filtering 
+EXTRAS = LOC_OF_EXTRA_FILTER_SCRIPTS/extras
+
+## CHANGE SAMPLE NAMES IF REQ'D; IF NOT NEEDED, SKIP THIS STEP. SEE BCFTOOLS DOCUMENTATION FOR LIST FORMAT (https://samtools.github.io/bcftools/bcftools.html#reheader)
+bcftools reheader -s ${SampleName} -o ${OUT}/chr1-22.allSamples.NEW.vcf.gz chr1-22.allSamples.vcf.gz
+
+## removed samples due to high missingness and low coverage (e.g. Fd15 removed because only 22% of reads mapped to reference after coverage was assessed)
+vcftools --gzvcf ${OUT}/chr1-22.allSamples.NEW.vcf.gz --remove-indv Fd15_Belize --recode --recode-INFO-all --stdout | bcftools +fill-tags | \
+bgzip -@ 16 -c > ${OUT}/chr1-22.allSamples-noFd15.vcf.gz && tabix -fp vcf ${OUT}/chr1-22.allSamples-noFd15.vcf.gz
+
+
+### step 1 - APPLY HARD-FILTERS
+bcftools filter -g 5 -e "QD < 2.0 || FS > 60.0 || MQ < 40 || \
+MQRankSum < -12.5 || ReadPosRankSum < -8.0 || SOR > 3.0" \
+-o ${OUT}/chr1-22.allSamples.GATK-HF.MQ40.vcf.gz -Oz ${OUT}/chr1-22.allSamples-noFd15.vcf.gz
+
+### step 2 - EXCLUDE INDELS AND ALL SITES EXCEPT BIALLELIC SITES
+vcftools --gzvcf ${OUT}/chr1-22.allSamples.GATK-HF.MQ40.vcf.gz --max-alleles 2 \
+--remove-indels --minDP 3 --recode --recode-INFO-all --stdout | bcftools +fill-tags | \
+bgzip -c > ${OUT}/chr1-22.allSamples.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.vcf.gz && tabix -p vcf ${OUT}/chr1-22.allSamples.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.vcf.gz
+
+### step 3
+## filtering by heterozygosity - USE PERL SCRIPT (vcf2maxhet.pl)
+zcat ${OUT}/chr1-22.allSamples.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.vcf.gz | perl $EXTRAS/vcf2maxhet.pl $HETERO > ${OUT}/chr1-22.allSamples.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.lowHet.vcf
+
+bgzip ${OUT}/chr1-22.allSamples.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.lowHet.vcf
+
+
+### step 4
+## Remove sites with more than XX% missing genotypes.  Exclude sites on the basis of the proportion of missing data (defined to be between 0 and 1, where 0 allows sites that are completely missing and 1 indicates no missing data allowed). 
+vcftools --gzvcf ${OUT}/chr1-22.allSamples.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.lowHet.vcf.gz --max-missing $MAXMISSING --recode --recode-INFO-all --stdout | bcftools +fill-tags | \
+bgzip -c > ${OUT}/chr1-22.allSamples.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.lowHet.maxmiss"$MAXMISSING".vcf.gz && tabix -p vcf ${OUT}/chr1-22.allSamples.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.lowHet.maxmiss"$MAXMISSING".vcf.gz
+
+### step 5 - split into OBF and Bat Falcon groups; need to make a list of samples to keep (e.g. OBF samples)
+vcftools --gzvcf ${OUT}/chr1-22.allSamples.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.lowHet.maxmiss"$MAXMISSING".vcf.gz --keep OBF_indv.list --max-alleles $MAXALLELES \
+--recode --recode-INFO-all --stdout | bcftools +fill-tags | \
+bgzip -@ 16 -c > ${OUT}/chr1-22.OBF-only.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.lowHet.maxmiss"$MAXMISSING".vcf.gz && tabix -fp vcf ${OUT}/chr1-22.OBF-only.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.lowHet.maxmiss"$MAXMISSING".vcf.gz
+
+vcftools --gzvcf ${OUT}/chr1-22.allSamples.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.lowHet.maxmiss"$MAXMISSING".vcf.gz --keep BatFalcon_indv.list --max-alleles $MAXALLELES \
+--recode --recode-INFO-all --stdout | bcftools +fill-tags | \
+bgzip -@ 16 -c > ${OUT}/chr1-22.BatFalcon-only.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.lowHet.maxmiss"$MAXMISSING".vcf.gz && tabix -fp vcf ${OUT}/chr1-22.BatFalcon-only.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.lowHet.maxmiss"$MAXMISSING".vcf.gz
+
+
+## step 6 - LD-prune
+bcftools +prune -m 0.6 -w 5000 ${OUT}/chr1-22.allSamples.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.lowHet.maxmiss"$MAXMISSING".vcf.gz -Oz -o ${OUT}/chr1-22.allSamples.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.lowHet.maxmiss"$MAXMISSING".LD60.vcf.gz
+
+bcftools +prune -m 0.6 -w 5000 ${OUT}/chr1-22.OBF-only.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.lowHet.maxmiss"$MAXMISSING".vcf.gz -Oz -o ${OUT}/chr1-22.OBF-only.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.lowHet.maxmiss"$MAXMISSING".LD60.vcf.gz
+
+bcftools +prune -m 0.6 -w 5000 ${OUT}/chr1-22.BatFalcon-only.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.lowHet.maxmiss"$MAXMISSING".vcf.gz -Oz -o ${OUT}/chr1-22.BatFalcon-only.GATK-HF.MQ"$MAPQ".max"$MAXALLELES"allele.dp"$MinDP".noindel.lowHet.maxmiss"$MAXMISSING".LD60.vcf.gz

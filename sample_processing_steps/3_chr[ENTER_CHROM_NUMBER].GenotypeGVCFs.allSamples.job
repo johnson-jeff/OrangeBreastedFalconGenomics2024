@@ -1,0 +1,41 @@
+#!/bin/bash
+#SBATCH --account=XXXX
+#SBATCH --job-name=chr[ENTER_CHROM_NUMBER].GenotypeGVCFs.allSamples
+#SBATCH -o chr[ENTER_CHROM_NUMBER].GenotypeGVCFs.allSamples.o%j
+#SBATCH -e chr[ENTER_CHROM_NUMBER].GenotypeGVCFs.allSamples.e%j
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=2
+#SBATCH --time=3-00:00:00
+
+
+## script used to combine list of samples for each CHROM separately as generated using HaplotypeCaller. Create and submit job for each chr separately.
+
+module load gcc/7.3.0 swset/2018.05 samtools/1.9 bcftools/1.9 jdk/8u172-b11 python/2.7.15 gatk/4.1.8.0-py27 picard/2.20.1 
+
+date
+
+GATK = /pfs/tc1/apps/el7-x86_64/u/gcc/7.3.0/gatk/4.1.8.0-55x2q2o/bin/gatk
+
+REF = LOC_AND_NAME_OF_REFERENCE_GENOME_FASTA_FILE
+
+IN = LOC_FOR_SAMPLE-CHROM_GVCFS ## chr_1
+OUT = LOC_OF_VCF_OUTFILES_COMBINING_SAMPLES_FOR_EACH_CHROM
+
+## SCRIPT BELOW IS SHOWN FOR CHR.1; CHANGE ACCORDINGLY FOR EACH CHROM
+## INTENTIONALLY EXCLUDED Z AND W CHROMS
+
+gatk CombineGVCFs -R ${REF} \
+--variant /gscratch/jjohn289/gVCFs_chr.GyrRef/chr_1/SAMPLE_1.g.vcf.gz \
+--variant /gscratch/jjohn289/gVCFs_chr.GyrRef/chr_1/SAMPLE_2.g.vcf.gz \
+--variant /gscratch/jjohn289/gVCFs_chr.GyrRef/chr_1/SAMPLE_3.g.vcf.gz \
+# ETC... \
+-O ${OUT}/chr1.allSamples.CombineGVCFs.g.vcf.gz
+
+gatk --java-options "-Xmx4g -XX:ParallelGCThreads=2" GenotypeGVCFs -R ${REF} -V ${OUT}/chr1.allSamples.CombineGVCFs.g.vcf.gz -O ${OUT}/chr1.allSamples.vcf.gz
+ 
+bcftools query -l ${OUT}/chr1.allSamples.vcf.gz | wc -l
+
+date
+
+
+### EITHER INCLUDE OUTGROUP TAXA IN THE ABOVE AND THEN REMOVE OUTGROUP TAXA DOWNSTREAM AND EXCLUDE NON-VARIANT SITES, OR RUN ABOVE SCRIPT AGAIN WITHOUT OUTGROUP

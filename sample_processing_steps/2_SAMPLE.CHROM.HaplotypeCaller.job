@@ -1,0 +1,43 @@
+#!/bin/bash
+#SBATCH --account=XXXXX
+#SBATCH --job-name=SAMPLE.CHROM.HaplotypeCaller
+#SBATCH -o SAMPLE.CHROM.HaplotypeCaller.o%j
+#SBATCH -e SAMPLE.CHROM.HaplotypeCaller.e%j
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=16
+#SBATCH --time=5-00:00:00
+
+
+### Run HaplotypeCaller for each *.rg.bam file separately to call variants and reduce total time for this step
+
+module load gcc/7.3.0 swset/2018.05 samtools/1.9 jdk/8u172-b11 python/2.7.15 gatk/4.1.8.0-py27 picard/2.20.1 
+
+picard=/pfs/tc1/apps/el7-x86_64/u/gcc/7.3.0/picard/2.20.1-6duewxy/bin/picard.jar
+GATK=/pfs/tc1/apps/el7-x86_64/u/gcc/7.3.0/gatk/4.1.8.0-55x2q2o/bin/gatk
+
+ID = SAMPLE_NAME
+CHR_LIST= LOC_AND_NAME_LISTING_CHROM_NAMES_OF_INTEREST #NAMES AS USED IN BAM FILES
+CHROMS=( `cat "${CHR_LIST}" `)
+
+IN = LOC_OF_RG.BAM_FILES
+OUT= LOC_FOR_SAMPLE-CHROM_GVCFS
+
+REF = LOC_AND_NAME_OF_REFERENCE_GENOME_FASTA_FILE
+
+#NAME_LIST=/gscratch/jjohn289/BWA_namelists/set9_namelist
+
+#NAMES=( `cat "${NAME_LIST}" `)	### this assumes that the name of the namelist is provided in the job script (as opposed to doing the above)
+	
+
+###### MAIN SCRIPT ######
+
+  
+for i in "${CHROMS[@]}"
+	do
+		date
+		gatk --java-options "-Xmx4g" HaplotypeCaller -I ${IN}/${ID}.rg.bam -R ${REF} -L ${i} --native-pair-hmm-threads 16 --max-alternate-alleles 12 -O ${OUT}/${ID}.${i}.g.vcf.gz -ERC GVCF 
+		
+		echo "Job", ${i}, "GATK HaplotypeCaller with 16 threads ", "Complete"
+		date
+	done
+	
