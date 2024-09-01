@@ -1,0 +1,23 @@
+# raxml-ng to make ML tree (steps from https://rdtarvin.github.io/IBS2019_Genomics-of-Biodiversity/main/2019/08/05/09-raxml-epi.html)
+
+## convert vcf to phylip & nexus (latter for splitstree)
+
+IN_FILE=FILTERED_Intergenic
+OUT_FILE=/project/falcongenomes/jjohn289/VCF_files/VCFs_GyrRef/filtered_VCFs/noOutGroup_VCFs_set2/chr1-22.intergenic.allSamples_GyrRef.noOutGroup.GATK-HF.MQ40.max2allele.dp5.noindel.lowHet.maxmiss0.90.vcf.gz
+BED=/project/falcongenomes/jjohn289/Reference_Gyr/revised.bFalRus1.pri_genomic_justgenes_wHeader.bed
+
+## LD-prune
+bcftools +prune -m 0.6 -w 10kb ${IN_FILE}.vcf.gz -Oz -o ${IN_FILE}.LD60.10kb.vcf.gz
+
+## convert VCF to phylip and nexus format using method of choice (e.g. https://github.com/edgardomortiz/vcf2phylip)
+python3 vcf2phylip.py --input ${IN_FILE}.LD60.10kb.vcf.gz -n
+
+## remove invariant sites (raxml cannot interpret them)
+python3 /raxml_ascbias-master/ascbias.py -p ${IN_FILE}.LD60.10kb.min4.phy
+
+
+## run RAxML using out.phy file generated using ascbias.py
+
+./raxml-ng --all --msa ${IN_FILE}.LD60.10kb_invariant-sites-removed.phy --model GTR+ASC_LEWIS --tree pars{10} --bs-trees 100 --outgroup PeregrineFalcon_SRR516253,PrairieFalcon_SRR6807233,SakerFalcon_SRR516282
+
+## Open out.phy.raxml.support in FigTree to see the bootstrapped tree! 
