@@ -1,0 +1,74 @@
+### Steps used to process filtered dataset using bcftools to generate ROH results (adopted from scripts provided by Josephine Roberson; see: https://github.com/jarobin/vaquitagenomics2022)
+
+IN_FILE=FILTERED_Intergenic
+
+## generate pseudo-genome with entirely 0/0 genotypes using filtered autosomal dataset
+gzcat {IN_FILE}.vcf.gz | grep -v "^#" | sed -e $'s/$/\t0\/0/g' | cat head.NoOutGroup.tmp - | bgzip > {IN_FILE}.pseudohom.vcf.gz   
+
+bcftools roh -e samples.NoOutGroup.list -G 30 --threads 12 -Orz -o {IN_FILE}.bcftools_ROH.txt.gz {IN_FILE}.vcf.gz
+bcftools roh -e samples.NoOutGroup.list -G 30 --threads 12 -Orz -o {IN_FILE}.pseudohom.bcftools_ROH.txt.gz {IN_FILE}.pseudohom.vcf.gz
+
+bcftools roh -e samples.NoOutGroup.list -G 30 --threads 16 -Orz -o {IN_FILE}.2.bcftools_ROH.txt.gz {IN_FILE}.vcf.gz
+
+gzcat {IN_FILE}.bcftools_ROH.txt.gz | tail -n+4 | sed 's/# //g' | sed -E 's/\[[0-9]\]//g' | sed 's/ (bp)//g' | sed 's/ (average fwd-bwd phred score)//g' | tr ' ' '_'> {IN_FILE}.bcftools_ROH.txt
+
+
+gzcat {IN_FILE}.pseudohom.bcftools_ROH.txt.gz | tail -n+4 | sed 's/# //g' | sed -E 's/\[[0-9]\]//g' | sed 's/ (bp)//g' | sed 's/ (average fwd-bwd phred score)//g' | tr ' ' '_'> {IN_FILE}.pseudohom.bcftools_ROH.2.txt
+
+gzcat {IN_FILE}.pseudohom.bcftools_ROH.txt.gz | awk -v s=pseudohom 'BEGIN{sum=0}{if ($2==s){sum+=$6}}END{printf "%s\t%s\n", s, sum}'
+#pseudohom	1094426532
+
+
+DATA={IN_FILE}.pseudohom.bcftools_ROH.txt.gz
+
+while read -r SAMPLE ; do 
+gzcat ${DATA} \
+| awk -v s=${SAMPLE} 'BEGIN{sum=0}{if ($2==s && $6>=1e6){sum+=$6; num+=1}}END{printf "%s\t%s\t%s\t%s\t%s\n", s, sum, sum/1094426532, num, sum/num}'
+done < samples.NoOutGroup.list
+
+## Prop of genome > 100kb ROH
+## Fd01_Panama	238022017	0.217486	1292	184228
+## Fd07_Ecuador	303800440	0.277589	1638	185470
+## Fd08_Panama	400701365	0.366129	1587	252490
+## Fd10_Panama	336745920	0.307692	1587	212190
+## Fd11_Belize	439533949	0.401611	1809	242971
+## Fd12_Surinam	332003171	0.303358	1799	184549
+## Fd14_Belize	421170655	0.384832	1708	246587
+## Fd17_Panama-Belize	282249570	0.257897	1133	249117
+## Fd18_Panama-Belize	459792261	0.420122	1393	330073
+## Fd19_Panama	350164453	0.319952	1579	221763
+## Fd20_Panama-Belize	336367142	0.307346	1779	189077
+## Fd21_Guatemala	457866446	0.418362	1770	258682
+## Fr01_Paraguay	34651671	0.0316619	122	284030
+## Fr08_Panama	36541231	0.0333885	247	147940
+## Fr09_Bolivia	27293111	0.0249383	99	275688
+## Fr11_Guyana	41684067	0.0380876	108	385964
+## Fr12_Brazil	30891640	0.0282263	120	257430
+## Fr13_Peru	30369013	0.0277488	107	283823
+## Fr14_CostaRica	149534748	0.136633	786	190248
+## Fr15_Peru	32393104	0.0295982	114	284150
+## Fr16_Belize	147052506	0.134365	760	193490
+## 
+## Prop of genome > 1Mb ROH
+## Fd01_Panama	17230026	0.0157434	12	1.43584e+06
+## Fd07_Ecuador	17517028	0.0160057	12	1.45975e+06
+## Fd08_Panama	113256879	0.103485	55	2.05922e+06
+## Fd10_Panama	57182111	0.0522485	31	1.84458e+06
+## Fd11_Belize	78470655	0.0717002	51	1.53864e+06
+## Fd12_Surinam	21406195	0.0195593	16	1.33789e+06
+## Fd14_Belize	71498632	0.0653298	41	1.74387e+06
+## Fd17_Panama-Belize	76084027	0.0695195	43	1.7694e+06
+## Fd18_Panama-Belize	176299861	0.161089	96	1.83646e+06
+## Fd19_Panama	66355199	0.0606301	31	2.14049e+06
+## Fd20_Panama-Belize	21324985	0.0194851	17	1.25441e+06
+## Fd21_Guatemala	92436421	0.0844611	57	1.62169e+06
+## Fr01_Paraguay	3750896	0.00342727	2	1875448
+## Fr08_Panama	1004111	0.000917477	1	1004111
+## Fr09_Bolivia	5094924	0.00465534	4	1273731
+## Fr11_Guyana	14962235	0.0136713	8	1.87028e+06
+## Fr12_Brazil	2211207	0.00202043	2	1.1056e+06
+## Fr13_Peru	5088358	0.00464934	4	1.27209e+06
+## Fr14_CostaRica	12851386	0.0117426	10	1.28514e+06
+## Fr15_Peru	6498848	0.00593813	5	1.29977e+06
+## Fr16_Belize	16136697	0.0147444	11	1.46697e+06
+## 
